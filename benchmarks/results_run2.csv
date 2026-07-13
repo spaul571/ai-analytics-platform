@@ -1,0 +1,11 @@
+ID,Question,Columns,Executed,Accurate,Format,Retried,Seconds,Code
+Q01,Which region brings in the most revenue?,Y,Y,Y,Y,N,2.7,"result = df.groupby('Region', observed=True)['Sales'].sum().sort_values(ascending=False)"
+Q02,What is our total profit margin as a percentage of sales?,Y,Y,Y,Y,N,1.8,result = (df['Profit'].sum() / df['Sales'].sum()) * 100
+Q03,Show me the five sub-categories with the deepest average markdown.,Y,Y,Y,Y,N,2.2,"result = df.groupby('Sub-Category', observed=True)['Discount'].mean().sort_values(ascending=False).head(5)"
+Q04,Which sub-categories are actually losing us money?,Y,Y,Y,Y,N,2.0,"totals = df.groupby('Sub-Category', observed=True)['Profit'].sum() ; result = totals[totals < 0].sort_values()"
+Q05,How did technology sales trend year by year?,Y,Y,Y,Y,N,2.4,"result = df[df['Category'] == 'Technology'].groupby('Order Year', observed=True)['Sales'].sum().reindex([2014, 2015, 2016, 2017])"
+Q06,Who are our top 5 buyers by total spend?,Y,Y,Y,Y,N,2.8,"result = df.groupby('Customer Name', observed=True)['Sales'].sum().sort_values(ascending=False).head(5)"
+Q07,Compare average delivery time across the different shipping speeds.,Y,Y,Y,Y,N,1.9,"result = df.groupby('Ship Mode', observed=True)['Shipping Days'].mean().sort_values(ascending=False)"
+Q08,"In 2017, which state had the highest furniture sales?",Y,Y,Y,Y,N,2.1,"result = df[(df['Order Year'] == 2017) & (df['Category'] == 'Furniture')].groupby('State', observed=True)['Sales'].sum().sort_values(ascending=False).head(1)"
+Q09,What percentage of our order lines lose money?,Y,N,N,N,Y,1.8,result = (df['Profit'] < 0).sum() / len(df)
+Q10,Show me the average profit at each discount level.,Y,Y,Y,Y,N,2.2,"result = df.groupby('Discount', observed=True)['Profit'].mean().sort_index()"
