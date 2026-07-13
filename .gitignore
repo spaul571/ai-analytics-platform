@@ -9,6 +9,9 @@ env/
 # .env.example is committed; .env is not.
 .env
 
+# Streamlit secrets carry the real proxy token. Only the example is committed.
+.streamlit/secrets.toml
+
 # Generated artefacts. All of these are rebuilt by:
 #   python -m scripts.check_task_c
 #   python -m scripts.export_report_assets
