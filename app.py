@@ -8,8 +8,56 @@ Run:  streamlit run app.py
 
 from __future__ import annotations
 
-import pandas as pd
-import streamlit as st
+# TEMPORARY DIAGNOSTIC. The deployed container dies with SIGSEGV immediately
+# after Uvicorn starts, which produces no Python traceback. faulthandler dumps
+# the C-level stack on a fatal signal, so the crashing import names itself in
+# the Cloud logs. Remove once the cause is found.
+import faulthandler
+import sys
+
+faulthandler.enable()
+
+print("--- import trace: starting", file=sys.stderr, flush=True)
+
+import numpy  # noqa: E402
+
+print(f"--- numpy {numpy.__version__} ok", file=sys.stderr, flush=True)
+
+import pandas as pd  # noqa: E402
+
+print(f"--- pandas {pd.__version__} ok", file=sys.stderr, flush=True)
+
+import pyarrow  # noqa: E402
+
+print(f"--- pyarrow {pyarrow.__version__} ok", file=sys.stderr, flush=True)
+
+import scipy  # noqa: E402
+
+print(f"--- scipy {scipy.__version__} ok", file=sys.stderr, flush=True)
+
+import sklearn  # noqa: E402
+
+print(f"--- sklearn {sklearn.__version__} ok", file=sys.stderr, flush=True)
+
+import plotly  # noqa: E402
+
+print(f"--- plotly {plotly.__version__} ok", file=sys.stderr, flush=True)
+
+import kaleido  # noqa: E402
+
+print("--- kaleido ok", file=sys.stderr, flush=True)
+
+import reportlab  # noqa: E402
+
+print(f"--- reportlab {reportlab.Version} ok", file=sys.stderr, flush=True)
+
+import docx  # noqa: E402
+
+print("--- python-docx ok", file=sys.stderr, flush=True)
+
+import streamlit as st  # noqa: E402
+
+print(f"--- streamlit {st.__version__} ok", file=sys.stderr, flush=True)
 
 from src.advanced.agent import ReActAgent
 from src.advanced.anomaly import CONTAMINATION, detect, narrate
@@ -23,6 +71,8 @@ from src.llm.pipeline import NLQueryPipeline
 from src.viz import autochart, charts
 from src.viz.export import ReportPayload, figure_to_png, figure_to_svg, to_docx, to_pdf
 from src.viz.theme import Theme
+
+print("--- all src imports ok, entering streamlit body", file=sys.stderr, flush=True)
 
 st.set_page_config(
     page_title="AI Analytics Platform",
