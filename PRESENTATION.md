@@ -33,7 +33,9 @@
 # Natural-language analytics on a 4B model
 ### Can a model that runs on one consumer GPU replace the analyst queue?
 
-`[Team names]` · CSE-638 Deep Learning
+**Team No. 5** — Shrikanta Paul · Md. Nurol Amin · Animesh Dey ·
+Kazi Meherunnesa Eva · Fardin Ahmed Alvi · Anika Tahsin Prova
+CSE-638 Deep Learning
 Dataset: Global E-Commerce Sales (9,994 order lines)
 Model: **Gemma 4 E4B**, local via LM Studio · **$0 per query**
 
@@ -76,7 +78,7 @@ engineering is the substance of this project.**
     │                     └── error → 1 retry    │
     └─────────────────────┬──────────────────────┘
                           │
-        DATA (pandas, 1.89 MB, sub-5 ms queries)
+        DATA (pandas, 1.27 MB, sub-5 ms queries)
                           │
         UI (Streamlit, 5 tabs, 8 charts, PDF/DOCX export)
 ```

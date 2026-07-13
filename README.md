@@ -135,11 +135,24 @@ src/
     pipeline.py        B2  3-phase pipeline with single auto-retry
     memory.py          B4  last-5-turn conversation context
     insights.py        B3  three preset analyses with LLM narration
-  viz/                 C   chart suite, auto-chart, PDF/DOCX export  (todo)
-  advanced/            D   anomaly detection, ReAct agent            (todo)
+  viz/
+    theme.py           C2  validated palette, light + dark
+    charts.py          C2  8 chart types
+    autochart.py       C3  rule-based chart selection + LLM caption
+    export.py          C4  PDF / DOCX / PNG / SVG export
+  advanced/
+    anomaly.py         D3  Isolation Forest + IQR + z-score
+    agent.py           D4  ReAct loop, 4 typed tools
 benchmarks/
   questions.py         the 10 benchmark questions + hand-written ground truth
 scripts/
   check_task_a.py      Task A acceptance check
   check_task_b.py      Task B acceptance check + benchmark
+  check_task_c.py      Task C acceptance check
+  check_task_d.py      Task D acceptance check
+deploy/
+  llm_proxy.py         bearer-token gate in front of LM Studio
+  start-demo.ps1       starts the proxy + Cloudflare Tunnel, prints the secrets
+  stop-demo.ps1        stops both
+DEPLOY.md              how the deployed app reaches a locally hosted model
 ```
