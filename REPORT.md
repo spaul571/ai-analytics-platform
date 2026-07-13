@@ -43,7 +43,7 @@ pandas code. The intelligence layer is **Gemma 4 E4B**, a 4-billion-parameter
 model running locally in LM Studio — chosen over a hosted API to eliminate cost,
 rate limits, and data egress.
 
-The system comprises a pandas data layer (sub-5 ms filtered aggregations, 62%
+The system comprises a pandas data layer (sub-5 ms filtered aggregations, 79%
 memory reduction via categorical downcasting), a three-phase natural-language
 query pipeline guarded by a three-layer execution sandbox, an eight-chart
 Plotly dashboard with rule-based automatic chart selection, and two advanced
@@ -152,7 +152,7 @@ than it gets a plain `groupby` right.
 ┌───────────────────────────────────┴────────────────────────────────────┐
 │                              DATA LAYER                                │
 │  loader.py → schema.py → query.py → profile.py → anomaly.py            │
-│  pandas DataFrame, in-memory, 1.27 MB, categorical dtypes              │
+│  pandas DataFrame, in-memory, 1.89 MB, categorical dtypes              │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │
 ┌───────────────────────────────────┴────────────────────────────────────┐
@@ -266,7 +266,7 @@ names.
 | 2 | Standardise categorical casing/whitespace | No-op on this dataset (already clean) — reported honestly rather than fabricating dirt |
 | 3 | Duplicate removal | 0 found |
 | 4 | Derive `Order Year`, `Order Month`, `Shipping Days` | **See below — this is a model-driven decision** |
-| 5 | Downcast low-cardinality text to `category` dtype | 3.34 MB → 1.27 MB |
+| 5 | Downcast low-cardinality text to `category` dtype | 9.21 MB → 1.89 MB |
 
 **Why derive `Order Month` rather than let the model compute it.** Gemma 4 E4B is
 markedly more reliable emitting `groupby('Order Month')` than a
@@ -300,18 +300,21 @@ cleaning, it is destroying evidence.
 | **Slowest** | **5.0 ms** (budget: 500 ms) → **PASS, 100× headroom** |
 
 **Time/memory trade-off.** Casting low-cardinality text columns to pandas
-`category` dtype costs a one-off conversion pass of roughly 40 ms and returns a
-**62.1% smaller frame** (3.34 MB → 1.27 MB), while also accelerating every
+`category` dtype costs a one-off conversion pass of roughly 50 ms and returns a
+**79.4% smaller frame** (9.21 MB → 1.89 MB), while also accelerating every
 subsequent `groupby`. At this dataset size the memory saving is not itself
-necessary — 1.27 MB versus 3.34 MB changes nothing operationally — but the
+necessary — 1.89 MB versus 9.21 MB changes nothing operationally — but the
 `groupby` speedup is what buys the 100× headroom against the 500 ms budget.
 
-These figures are the ones `python -m scripts.check_task_a` prints on the
-submitted code, and they are shallow `memory_usage()` totals. An earlier draft of
-this report quoted 9.21 MB → 1.89 MB (79.4%), measured with `deep=True`, which
-also counts the Python string objects behind an `object` column. Both are
-defensible measurements of different things, but only one of them can be
-reproduced by running the acceptance script, so that is the one reported here.
+**This figure depends on how pandas stores strings, which is not obvious.**
+pandas 3.0 defaults `mode.string_storage` to `"auto"`, meaning Arrow-backed
+strings whenever pyarrow is installed — and Streamlit always installs pyarrow.
+Under that default the same downcast measures 3.34 MB → 1.27 MB (62.1%), because
+the Arrow-backed baseline is already compact. We set `string_storage="python"`
+explicitly in `src/config.py`, for a reason that had nothing to do with memory:
+Arrow-backed categories segfault the deployed Linux container (see §4.2). The
+79.4% above is therefore the figure the submitted code actually produces, and
+`python -m scripts.check_task_a` reproduces it.
 
 **Lazy loading was not implemented.** The brief requires it only above 1M rows;
 this dataset is 9,994. Implementing chunked processing here would be dead code

@@ -8,59 +8,16 @@ Run:  streamlit run app.py
 
 from __future__ import annotations
 
-# TEMPORARY DIAGNOSTIC. The deployed container dies with SIGSEGV immediately
-# after Uvicorn starts, which produces no Python traceback. faulthandler dumps
-# the C-level stack on a fatal signal, so the crashing import names itself in
-# the Cloud logs. Remove once the cause is found.
-import faulthandler
-import sys
-
-faulthandler.enable()
-
-print("--- import trace: starting", file=sys.stderr, flush=True)
-
-import numpy  # noqa: E402
-
-print(f"--- numpy {numpy.__version__} ok", file=sys.stderr, flush=True)
-
-import pandas as pd  # noqa: E402
-
-print(f"--- pandas {pd.__version__} ok", file=sys.stderr, flush=True)
-
-import pyarrow  # noqa: E402
-
-print(f"--- pyarrow {pyarrow.__version__} ok", file=sys.stderr, flush=True)
-
-import scipy  # noqa: E402
-
-print(f"--- scipy {scipy.__version__} ok", file=sys.stderr, flush=True)
-
-import sklearn  # noqa: E402
-
-print(f"--- sklearn {sklearn.__version__} ok", file=sys.stderr, flush=True)
-
-import plotly  # noqa: E402
-
-print(f"--- plotly {plotly.__version__} ok", file=sys.stderr, flush=True)
-
-import kaleido  # noqa: E402
-
-print("--- kaleido ok", file=sys.stderr, flush=True)
-
-import reportlab  # noqa: E402
-
-print(f"--- reportlab {reportlab.Version} ok", file=sys.stderr, flush=True)
-
-import docx  # noqa: E402
-
-print("--- python-docx ok", file=sys.stderr, flush=True)
-
-import streamlit as st  # noqa: E402
-
-print(f"--- streamlit {st.__version__} ok", file=sys.stderr, flush=True)
+import pandas as pd
+import streamlit as st
 
 from src.advanced.agent import ReActAgent
 from src.advanced.anomaly import CONTAMINATION, detect, narrate
+
+# Imported for a side effect as well as for LLM: src.config sets pandas' string
+# storage to "python". On the pandas 3 default of "auto" the strings are
+# Arrow-backed, and materialising an Arrow-backed category segfaults the Linux
+# container this deploys to. See the comment in src/config.py.
 from src.config import LLM
 from src.data.loader import load_dataset
 from src.data.profile import profile_dataset
@@ -71,8 +28,6 @@ from src.llm.pipeline import NLQueryPipeline
 from src.viz import autochart, charts
 from src.viz.export import ReportPayload, figure_to_png, figure_to_svg, to_docx, to_pdf
 from src.viz.theme import Theme
-
-print("--- all src imports ok, entering streamlit body", file=sys.stderr, flush=True)
 
 st.set_page_config(
     page_title="AI Analytics Platform",
@@ -181,6 +136,22 @@ if "chart_override" not in st.session_state:
 theme = Theme("light")
 
 
+def _options(frame: pd.DataFrame, column: str) -> list[str]:
+    """Sorted filter options for a column, without materialising the values.
+
+    A `category` column already stores its distinct values in `.cat.categories`,
+    so reading them costs nothing and scans nothing. The obvious spelling —
+    sorted(frame[column].unique()) — is both a full column scan and, on pandas 3
+    with an Arrow string backend, a call into pyarrow's take(), which is what
+    segfaulted the deployed container. Non-categorical columns fall back to the
+    scan because they have no categories to read.
+    """
+    values = frame[column]
+    if isinstance(values.dtype, pd.CategoricalDtype):
+        return sorted(str(v) for v in values.cat.categories)
+    return sorted(str(v) for v in values.dropna().unique())
+
+
 # ------------------------------------------------------------------- sidebar
 with st.sidebar:
     st.title("AI Analytics")
@@ -205,19 +176,19 @@ with st.sidebar:
 
     regions = st.multiselect(
         "Region",
-        options=sorted(df_all["Region"].unique()),
+        options=_options(df_all, "Region"),
         default=[],
         placeholder="All regions",
     )
     categories = st.multiselect(
         "Category",
-        options=sorted(df_all["Category"].unique()),
+        options=_options(df_all, "Category"),
         default=[],
         placeholder="All categories",
     )
     segments = st.multiselect(
         "Customer segment",
-        options=sorted(df_all["Segment"].unique()),
+        options=_options(df_all, "Segment"),
         default=[],
         placeholder="All segments",
     )

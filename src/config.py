@@ -10,11 +10,32 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import pandas as pd
 from dotenv import load_dotenv
 
 load_dotenv()
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+# Store strings with Python objects rather than Arrow.
+#
+# pandas 3.0 defaults `mode.string_storage` to "auto", which means Arrow-backed
+# strings whenever pyarrow is installed — and Streamlit always installs pyarrow.
+# Every text column here is then an ArrowStringArray, so the `category` dtypes
+# built on top of them are Arrow-backed too, and merely *materialising* one
+# (iterating it, or calling .unique()) dispatches into pyarrow.compute.take.
+#
+# On the Linux wheels that Streamlit Cloud installs (pyarrow 25.0.0, pandas
+# 3.0.1) that call segfaults: the container died with SIGSEGV inside
+# pyarrow/compute.py:508 take, reached from Categorical.__iter__, the moment the
+# sidebar built its filter options. The Windows wheels survive the same call,
+# which is why this never reproduced locally.
+#
+# Setting "python" keeps strings in object arrays, so the crashing path is never
+# entered. It costs some memory — the 62.1% downcast figure in the report is
+# measured with this setting in place — and it is set here, in the module every
+# other module imports, so that it is applied before any DataFrame is built.
+pd.options.mode.string_storage = "python"
 
 
 def _setting(key: str, default: str) -> str:

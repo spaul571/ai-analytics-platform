@@ -78,7 +78,7 @@ engineering is the substance of this project.**
     │                     └── error → 1 retry    │
     └─────────────────────┬──────────────────────┘
                           │
-        DATA (pandas, 1.27 MB, sub-5 ms queries)
+        DATA (pandas, 1.89 MB, sub-5 ms queries)
                           │
         UI (Streamlit, 5 tabs, 8 charts, PDF/DOCX export)
 ```
