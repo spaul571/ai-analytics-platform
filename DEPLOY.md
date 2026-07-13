@@ -95,12 +95,12 @@ arrive in the proxy's console.
 
 ---
 
-## Every demo
+## Starting it, every time
 
-Three processes, in this order. Keep all three windows open.
+### 1. LM Studio, by hand
 
-**1. LM Studio.** Load `google/gemma-4-e4b`, start the server on port 1234.
-Before the demo, change two settings — both need an eject + reload:
+Load `google/gemma-4-e4b` and start the server on port 1234 (Developer tab →
+Status: Running). Two settings to change first — both need an eject + reload:
 
 - **Context Length: 131072 → 16384.** The KV cache at 131k reserves several GB
   of VRAM for prompts that never exceed ~2,300 tokens; the logs already show
@@ -109,46 +109,44 @@ Before the demo, change two settings — both need an eject + reload:
 - **Enable Thinking: OFF.** Reasoning tokens add latency and can leak into the
   code that Phase 1 parses.
 
-**2. The auth proxy.**
+### 2. Everything else, with one command
 
 ```powershell
-$env:PROXY_TOKEN = "<the token from step 2>"
-.venv\Scripts\python.exe -m uvicorn deploy.llm_proxy:app --port 1235
+.\deploy\start-demo.ps1
 ```
 
-It refuses to start without `PROXY_TOKEN` — an unauthenticated proxy would
-defeat its own purpose, so there is deliberately no default.
+It refuses to continue if LM Studio is not answering, starts the auth proxy,
+opens the tunnel, waits for the public hostname to resolve, confirms an
+unauthenticated request is refused with a 401, and then prints the exact secrets
+block to paste into Streamlit Cloud.
 
-**3. The tunnel.**
+The **token is reused across runs** — it is stored in `.env` and generated only
+once — so `LLM_API_KEY` in the Cloud secrets stays valid forever.
+
+### 3. Update one secret
+
+**The hostname is new every single run.** A `trycloudflare.com` quick tunnel gets
+a fresh random name each time `cloudflared` starts, so after every restart the
+`LLM_BASE_URL` in the Cloud secrets points at a dead address until you update it.
+That is the one manual step, and it cannot be avoided without a named tunnel on a
+domain you own (`cloudflared tunnel create`) — worth doing if you have a domain,
+not worth it if you do not.
+
+Paste the printed block into **App settings → Secrets** and save. The app reboots
+and answers.
+
+## Stopping it
 
 ```powershell
-cloudflared tunnel --url http://localhost:1235
+.\deploy\stop-demo.ps1
 ```
 
-It prints a `https://<random>.trycloudflare.com` hostname.
+Kills the proxy and the tunnel. LM Studio and the Cloud deployment are left
+alone; the deployed app will simply have nothing to talk to until you start the
+tunnel again.
 
-> **A quick tunnel gets a new random hostname every restart.** If you restart
-> `cloudflared`, you must update `LLM_BASE_URL` in the Streamlit secrets or the
-> deployed app is pointing at a dead address. To get a hostname that survives
-> restarts you need a named tunnel on a domain you control
-> (`cloudflared tunnel create`), which is worth doing if you have a domain and
-> not worth it if you do not.
-
-### Check it end to end before you present
-
-```powershell
-# 1. tunnel is alive (no token needed, reveals nothing)
-curl https://<hostname>.trycloudflare.com/healthz
-
-# 2. an unauthenticated call is refused - should print 401
-curl -o /dev/null -w "%{http_code}" https://<hostname>.trycloudflare.com/v1/models
-
-# 3. an authenticated call reaches the model - should list gemma
-curl -H "Authorization: Bearer <token>" https://<hostname>.trycloudflare.com/v1/models
-```
-
-Then open the Streamlit Cloud URL and ask one real question. If the answer comes
-back, every hop in the diagram works.
+Nothing here costs money while it is down, and nothing needs to be torn down in
+the Cloud dashboard between demos.
 
 ---
 

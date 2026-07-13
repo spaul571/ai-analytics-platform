@@ -33,3 +33,4 @@ data/*.csv
 .idea/
 Thumbs.db
 desktop.ini
+deploy/.run/
