@@ -128,6 +128,7 @@ src/
     schema.py          A1  schema extraction -> LLM prompt block
     query.py           A2  aggregation + filtered query engine
     profile.py         A3  quality report, IQR outliers
+    external.py        D4  public-holiday API - the one call that leaves the machine
   llm/
     client.py          B5  LM Studio client, timeout/truncation/empty handling
     prompts.py         B1  schema-aware prompt, synonym map, few-shot examples
@@ -140,9 +141,10 @@ src/
     charts.py          C2  8 chart types
     autochart.py       C3  rule-based chart selection + LLM caption
     export.py          C4  PDF / DOCX / PNG / SVG export
+    browserless.py     C4  redraws charts with matplotlib where no browser exists
   advanced/
     anomaly.py         D3  Isolation Forest + IQR + z-score
-    agent.py           D4  ReAct loop, 4 typed tools
+    agent.py           D4  ReAct loop, 6 typed tools
 benchmarks/
   questions.py         the 10 benchmark questions + hand-written ground truth
 scripts/
@@ -154,5 +156,13 @@ deploy/
   llm_proxy.py         bearer-token gate in front of LM Studio
   start-demo.ps1       starts the proxy + Cloudflare Tunnel, prints the secrets
   stop-demo.ps1        stops both
+report/                everything the written report is built from
+  REPORT.pdf           the submitted deliverable (M5) - read this one
+  REPORT.tex           its source; build with `latexmk -pdf REPORT.tex`
+  REPORT.md            the working draft the LaTeX was typeset from
+  figures/             every chart, light + dark, written by scripts/export_report_assets.py
+  benchmark-runs/      the raw benchmark runs the report's tables cite
+docs/
+  TABS.md              what each app tab is for, and how the agent differs from the assistant
 DEPLOY.md              how the deployed app reaches a locally hosted model
 ```

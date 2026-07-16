@@ -5,7 +5,12 @@ plus a captions file. Beats screenshotting the browser: the images are crisp,
 reproducible, and free of surrounding UI chrome.
 
 Run:  python -m scripts.export_report_assets
-Output: exports/figures/
+Output: report/figures/
+
+Writes straight into the report folder, which is the copy REPORT.tex compiles
+against. It used to write to the gitignored exports/ and the figures were copied
+across by hand, which meant the committed images could silently drift from the
+code that draws them.
 """
 
 from __future__ import annotations
@@ -18,7 +23,7 @@ from src.viz import charts
 from src.viz.export import figure_to_png
 from src.viz.theme import Theme
 
-OUT = Path("exports/figures")
+OUT = Path("report/figures")
 
 # The design decision behind each chart, for the report's caption.
 CAPTIONS: dict[str, str] = {
