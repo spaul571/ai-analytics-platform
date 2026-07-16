@@ -64,6 +64,7 @@ from src.data.external import MAX_YEAR, MIN_YEAR, ExternalDataError, fetch_holid
 from src.data.query import Aggregation, Filter, aggregate
 from src.data.schema import DatasetSchema
 from src.llm.client import LLMClient, LLMError
+from src.llm.markdown import render_safe
 
 # The model gets this many turns to reach an answer before we stop it. Three
 # tool calls plus a final answer covers every question the tools can express;
@@ -299,22 +300,14 @@ RULES:
 """
 
 # The model emits LaTeX-style $...$ around figures regardless of the instruction
-# above - it is a strong habit from its training data. Streamlit's Markdown
-# renders $...$ as math, so a dollar amount silently becomes an italic equation.
-# The prompt reduces the frequency; this regex removes what survives.
-_MATH_WRAPPED_NUMBER = re.compile(r"\$(-?[\d,]+(?:\.\d+)?)\$")
-
-
-def _strip_math_delimiters(text: str) -> str:
-    """Turn `$200$` and `$-74,142$` into `$200` and `-$74,142`."""
-
-    def replace(match: re.Match) -> str:
-        number = match.group(1)
-        if number.startswith("-"):
-            return f"-${number[1:]}"
-        return f"${number}"
-
-    return _MATH_WRAPPED_NUMBER.sub(replace, text)
+# above - it is a strong habit from its training data. Streamlit's Markdown renders
+# $...$ as math, so a dollar amount silently becomes an italic equation.
+#
+# This was a local regex here that only caught a wrapped number ($200$). It missed
+# the commoner shape - two plain amounts in one sentence, which makes the renderer
+# read the prose between them as an equation - and the Task B narrative had no
+# protection at all. Both now go through the same helper.
+_strip_math_delimiters = render_safe
 
 
 # ------------------------------------------------------------------ executor

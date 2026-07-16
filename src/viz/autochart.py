@@ -23,6 +23,7 @@ import plotly.graph_objects as go
 
 from src.config import LLM
 from src.llm.client import LLMClient, LLMError
+from src.llm.markdown import render_safe
 from src.viz.theme import STATE_CODES, Theme
 
 ChartType = Literal["bar", "line", "scatter", "map", "table"]
@@ -305,7 +306,7 @@ def caption(
         # keep the first, which is always the one carrying the finding.
         text = " ".join(response.text.split())
         first = re.split(r"(?<=[.!?])\s+", text)[0]
-        return first
+        return render_safe(first)
     except LLMError:
         return (
             f"{CHART_LABELS[chart_type]} of {len(frame)} rows "

@@ -152,17 +152,17 @@ scripts/
   check_task_b.py      Task B acceptance check + benchmark
   check_task_c.py      Task C acceptance check
   check_task_d.py      Task D acceptance check
-deploy/
-  llm_proxy.py         bearer-token gate in front of LM Studio
-  start-demo.ps1       starts the proxy + Cloudflare Tunnel, prints the secrets
-  stop-demo.ps1        stops both
+  capture_ui.py        screenshots every tab for the report (needs the app running)
 report/                everything the written report is built from
   REPORT.pdf           the submitted deliverable (M5) - read this one
   REPORT.tex           its source; build with `latexmk -pdf REPORT.tex`
   REPORT.md            the working draft the LaTeX was typeset from
-  figures/             every chart, light + dark, written by scripts/export_report_assets.py
+  figures/             charts (light + dark) and UI screenshots, all regenerated
   benchmark-runs/      the raw benchmark runs the report's tables cite
-docs/
-  TABS.md              what each app tab is for, and how the agent differs from the assistant
-DEPLOY.md              how the deployed app reaches a locally hosted model
 ```
+
+This repository carries the application, its acceptance checks and the report.
+The operational tooling that puts a locally hosted model behind a public hostname
+for the live demo — the authenticating proxy, the tunnel scripts and their runbook —
+is kept on the team's machines rather than published, along with the presentation
+notes. Section 3.1 of the report documents that topology and the reasoning behind it.

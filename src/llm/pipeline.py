@@ -21,6 +21,7 @@ import pandas as pd
 from src.config import LLM
 from src.data.schema import DatasetSchema
 from src.llm.client import LLMClient, LLMError
+from src.llm.markdown import render_safe
 from src.llm.memory import ConversationMemory, Turn
 from src.llm.prompts import (
     CODE_RESPONSE_SCHEMA,
@@ -158,7 +159,9 @@ class NLQueryPipeline:
             build_formatter_messages(question, preview, execution.code),
             temperature=LLM.narrative_temperature,
         )
-        return response.text, response.elapsed_seconds, response.truncated
+        # The narrative is money-dense and Streamlit reads $...$ as an equation,
+        # so it is escaped before anything can render it. See llm/markdown.py.
+        return render_safe(response.text), response.elapsed_seconds, response.truncated
 
     # ------------------------------------------------------------------- run
     def ask(self, question: str, use_history: bool = True) -> PipelineResult:

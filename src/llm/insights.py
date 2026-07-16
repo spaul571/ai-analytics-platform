@@ -20,6 +20,7 @@ import pandas as pd
 from src.config import DATA, LLM
 from src.data.query import aggregate
 from src.llm.client import LLMClient, LLMError
+from src.llm.markdown import render_safe
 
 NARRATIVE_SYSTEM_PROMPT = """You are a retail analytics consultant writing for an
 executive audience.
@@ -280,7 +281,7 @@ def generate_insight(
             temperature=LLM.narrative_temperature,
             max_tokens=800,
         )
-        insight.narrative = response.text
+        insight.narrative = render_safe(response.text)
         insight.elapsed_seconds = response.elapsed_seconds
         if response.truncated:
             insight.narrative += "\n\n*(Response was cut off at the token limit.)*"

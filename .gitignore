@@ -1,3 +1,16 @@
+# Local-only material. These exist on the team's machines but are deliberately
+# not published: the repository carries the application, the acceptance checks and
+# the report, and nothing else.
+#   deploy/       the proxy + tunnel scripts that put the local model behind a
+#                 public hostname. Local operations, not part of the deployed app.
+#   DEPLOY.md     the runbook for the above.
+#   PRESENTATION.md  speaker notes.
+#   docs/         working notes.
+deploy/
+DEPLOY.md
+PRESENTATION.md
+docs/
+
 # Python
 __pycache__/
 *.py[cod]

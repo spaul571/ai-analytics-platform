@@ -41,6 +41,7 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from src.llm.markdown import render_plain
 from src.viz.browserless import (
     UnsupportedFigure,
     figure_to_png_fallback,
@@ -179,6 +180,7 @@ def _md_to_rl(text: str) -> str:
     Only the inline marks the narrative prompt actually produces are handled -
     bold, italic, and code. A full Markdown parser would be dead weight.
     """
+    text = render_plain(text)  # reportlab has no maths syntax to escape $ from
     text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     text = _MD_BOLD.sub(r"<b>\1</b>", text)
     text = _MD_ITALIC.sub(r"<i>\1</i>", text)
@@ -361,7 +363,7 @@ def to_docx(payload: ReportPayload) -> bytes:
             document.add_picture(io.BytesIO(png), width=Inches(6.3))
             if payload.caption:
                 caption = document.add_paragraph()
-                run = caption.add_run(payload.caption)
+                run = caption.add_run(render_plain(payload.caption))
                 run.italic = True
                 run.font.size = Pt(9)
                 run.font.color.rgb = RGBColor(0x52, 0x51, 0x4E)
@@ -405,7 +407,7 @@ def to_docx(payload: ReportPayload) -> bytes:
 
 def _add_markdown_runs(paragraph, text: str) -> None:
     """Add text to a Word paragraph, honouring **bold** segments."""
-    for i, part in enumerate(_MD_BOLD.split(text)):
+    for i, part in enumerate(_MD_BOLD.split(render_plain(text))):
         if not part:
             continue
         run = paragraph.add_run(part)

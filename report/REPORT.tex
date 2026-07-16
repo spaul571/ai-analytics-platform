@@ -7,12 +7,15 @@
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
 \usepackage{lmodern}
-\usepackage[margin=2.2cm]{geometry}
+% 1.9cm rather than the usual 2.2: the brief caps the report at 20 pages and the
+% screenshots are worth more than the whitespace.
+\usepackage[margin=1.9cm]{geometry}
 \usepackage{microtype}
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{longtable}
 \usepackage{array}
+\usepackage{multirow}
 \usepackage{tabularx}
 \usepackage{amssymb}
 \usepackage{xcolor}
@@ -63,6 +66,18 @@
 
 % Tighter lists - the report is page-limited.
 \setlist{itemsep=1pt,parsep=0pt,topsep=3pt}
+
+% Fourteen figures in twenty pages. Left at their defaults, LaTeX would rather push
+% a float to the next page than fill 90% of this one, and the report bleeds pages to
+% whitespace. These let a float sit on a page that is nearly full.
+\setlength{\textfloatsep}{10pt plus 2pt minus 2pt}
+\setlength{\floatsep}{10pt plus 2pt minus 2pt}
+\setlength{\intextsep}{10pt plus 2pt minus 2pt}
+\renewcommand{\topfraction}{0.92}
+\renewcommand{\bottomfraction}{0.9}
+\renewcommand{\textfraction}{0.06}
+\renewcommand{\floatpagefraction}{0.88}
+\captionsetup{skip=4pt}
 
 \newcommand{\note}[1]{\textcolor{muted}{\small #1}}
 
@@ -280,6 +295,37 @@ Python module; the only two components that leave the machine are the LM Studio
 endpoint and the agent's holiday lookup (\S\ref{sec:agent}).}
 \end{figure}
 
+\paragraph{Where each requirement lives.} Every claim in this report is reproducible
+by a script in the repository rather than by taking our word for it.
+
+\begin{center}
+\small
+\begin{tabularx}{\textwidth}{@{}llX@{}}
+\toprule
+\textbf{Task} & \textbf{Module} & \textbf{Reproduce it with} \\
+\midrule
+A1 Ingestion, schema   & \texttt{data/loader.py}, \texttt{data/schema.py} & \multirow{4}{*}{\texttt{scripts/check\_task\_a.py}} \\
+A2 Query engine        & \texttt{data/query.py}          & \\
+A3 Quality profiling   & \texttt{data/profile.py}        & \\
+A4 Performance         & ---                             & \\
+\addlinespace
+B1 Prompt design       & \texttt{llm/prompts.py}         & \multirow{5}{*}{\texttt{scripts/check\_task\_b.py}} \\
+B2 Text-to-code        & \texttt{llm/pipeline.py}, \texttt{llm/sandbox.py} & \\
+B3 Insights            & \texttt{llm/insights.py}        & \\
+B4 Context             & \texttt{llm/memory.py}          & \\
+B5 Reliability         & \texttt{llm/client.py}          & \\
+\addlinespace
+C1 Dashboard           & \texttt{app.py}                 & \multirow{4}{*}{\texttt{scripts/check\_task\_c.py}} \\
+C2 Chart suite         & \texttt{viz/charts.py}, \texttt{viz/theme.py} & \\
+C3 AI-driven charts    & \texttt{viz/autochart.py}       & \\
+C4 Export              & \texttt{viz/export.py}, \texttt{viz/browserless.py} & \\
+\addlinespace
+D3 Anomaly detection   & \texttt{advanced/anomaly.py}    & \multirow{2}{*}{\texttt{scripts/check\_task\_d.py}} \\
+D4 ReAct agent         & \texttt{advanced/agent.py}, \texttt{data/external.py} & \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
 \paragraph{Data flow for one natural-language question.}
 \begin{enumerate}[leftmargin=*]
 \item User types \emph{``Which sub-categories are losing us money?''}
@@ -328,8 +374,10 @@ address. We did the third.
 \node[box,below=of browser] (cloud) {\textbf{Streamlit Community Cloud}\\\scriptsize deployed from the GitHub repository (M6); reads \texttt{LLM\_BASE\_URL} from secrets};
 \node[box,below=of cloud] (edge) {\textbf{Cloudflare edge} --- public hostname};
 \node[gpu,below=12mm of edge] (tunnel) {\texttt{cloudflared}\\\scriptsize outbound tunnel --- no inbound ports opened};
-\node[gpu,below=of tunnel] (proxy) {\texttt{deploy/llm\_proxy.py}\\\scriptsize bearer-token auth, \texttt{compare\_digest}};
+\node[gpu,below=of tunnel] (proxy) {authenticating proxy\\\scriptsize bearer-token auth, \texttt{compare\_digest}};
 \node[gpu,below=of proxy] (lms) {\textbf{LM Studio :1234} $\cdot$ Gemma 4 E4B\\\scriptsize the AI calls are genuinely live (brief \S7.3)};
+% The proxy is local operations tooling and is not published with the application,
+% so it is described here rather than cited by a path a reader cannot open.
 
 \draw[flow] (browser) -- (cloud);
 \draw[flow] (cloud) -- (edge);
@@ -358,8 +406,8 @@ nothing more.
 \paragraph{The authenticating proxy is not optional.} LM Studio's OpenAI-compatible
 server has no authentication of any kind: anything that can reach port 1234 can run
 inference and enumerate the loaded models. That is harmless on \texttt{localhost} and
-unacceptable the moment the port acquires a public hostname. \texttt{deploy/llm\_proxy.py}
-is what the tunnel actually exposes, and it rejects any request whose
+unacceptable the moment the port acquires a public hostname. A small authenticating
+proxy is what the tunnel actually exposes, and it rejects any request whose
 \texttt{Authorization} header does not carry the expected bearer token, comparing with
 \texttt{secrets.compare\_digest} so the token cannot be recovered from response timing.
 It refuses to start at all if no token is configured, because an unauthenticated proxy
@@ -621,7 +669,57 @@ four axes.
 \end{center}
 
 \textbf{Not one of those gains came from changing the model.} Each came from reading
-the actual generated code and diagnosing a specific defect.
+the actual generated code and diagnosing a specific defect. All four are worth
+reading together, because the pattern is the same every time --- the fix removes the
+possibility of the failure rather than patching the instance:
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}lXX@{}}
+\toprule
+\textbf{\#} & \textbf{Defect} & \textbf{Fix, and why it is structural} \\
+\midrule
+1 & JSON escaping ate the subscript brackets --- only on the one question where the model chose double quotes &
+    Constrain it to single quotes: escaping becomes \emph{unnecessary} rather than correct \\
+\addlinespace
+2 & Filtered the loss-making rows before grouping, answering a different question &
+    One few-shot example of the aggregate-then-filter shape \\
+\addlinespace
+3 & Our own sandbox's two layers disagreed: \texttt{len} was runnable but not validatable &
+    Both lists derived from one source, so drift is impossible rather than unlikely \\
+\addlinespace
+4 & The renderer turned money into an equation (\S\ref{sec:math}) &
+    Escape every \texttt{\$} reaching the renderer: the maths syntax is never wanted, so it is disabled wholesale \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Per question, on the final run (\texttt{report/benchmark-runs/result3.md}):
+
+\begin{center}
+\small
+\begin{tabularx}{\textwidth}{@{}lXccccr@{}}
+\toprule
+\textbf{\#} & \textbf{Question} & \textbf{Cols} & \textbf{Exec} & \textbf{Acc} & \textbf{Fmt} & \textbf{Time} \\
+\midrule
+Q01 & Which region brings in the most revenue?                        & Y & Y & Y & Y & 2.2\,s \\
+Q02 & What is our total profit margin as a percentage of sales?       & Y & Y & Y & Y & 1.5\,s \\
+Q03 & Show me the five sub-categories with the deepest average markdown. & Y & Y & Y & Y & 1.8\,s \\
+Q04 & Which sub-categories are actually losing us money?              & Y & Y & Y & Y & 2.4\,s \\
+Q05 & How did technology sales trend year by year?                    & Y & Y & Y & Y & 2.4\,s \\
+Q06 & Who are our top 5 buyers by total spend?                        & Y & Y & Y & Y & 1.9\,s \\
+Q07 & Compare average delivery time across the different shipping speeds. & Y & Y & Y & Y & 2.2\,s \\
+Q08 & In 2017, which state had the highest furniture sales?           & Y & Y & Y & Y & 2.2\,s \\
+Q09 & What percentage of our order lines lose money?                  & Y & Y & Y & Y & 1.8\,s \\
+Q10 & Show me the average profit at each discount level.              & Y & Y & Y & Y & 2.0\,s \\
+\midrule
+\multicolumn{2}{@{}l}{\textbf{10/10 on every axis}} & \textbf{10} & \textbf{10} & \textbf{10} & \textbf{10} & \textbf{2.04\,s} \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\note{Cols = correct columns identified. Exec = generated code ran without error.
+Acc = result matches the hand-written ground truth. Fmt = answer obeyed the output
+contract. Times range 1.5--2.4\,s; no question needed the auto-retry.}
 
 \subsubsection*{Defect 1 --- structured output corrupts generated code (Run 1, Q01)}
 
@@ -693,6 +791,45 @@ reworded to be unambiguous --- \textbf{not easier}. We disclose this because rew
 a benchmark after observing failure is a real methodological hazard, and the original
 phrasings and responses are preserved in \texttt{report/benchmark-runs/result.md}.
 
+\subsection{Defect 4 --- the renderer turned money into an equation}
+\label{sec:math}
+
+This one was invisible to every check we had, because it corrupts nothing: the code
+is right, the number is right, and the answer is unreadable anyway.
+
+Streamlit renders \texttt{\$...\$} as LaTeX maths. A narrative about profit contains
+two dollar amounts in a sentence, so the renderer reads the prose \emph{between}
+them as an equation:
+
+\begin{lstlisting}
+model wrote  Tables show the largest loss at $17,725.48, indicating this area
+             requires immediate cost review. The cumulative losses total $20,387.14.
+
+user saw     Tables show the largest loss at -\17,725.48
+             *indicatingthisarearequiresimmediatecostreview.Thecumulativelossestotal*
+             -$20,387.14$
+\end{lstlisting}
+
+The sentence becomes italic serif with its spaces stripped. Nothing raises, so the
+acceptance checks pass: they assert on the \emph{text} the model returns, and the
+text is fine. Only a human looking at the screen sees it, which is why it survived
+until we screenshotted the app for this report.
+
+The prompts already told the model not to write bare dollar amounts, and the agent
+carried a regex for the \texttt{\$200\$} shape. Both were insufficient for the same
+reason: \textbf{money written as \texttt{\$1,234} is overwhelmingly common in the
+model's training data, and one line of instruction does not outweigh that.} The
+regex also only caught a wrapped number, not the far commoner two-amounts-in-a-
+sentence span, and the Task B narrative had no protection at all.
+
+\textbf{The fix escapes every dollar sign that reaches the renderer}
+(\texttt{llm/markdown.py}), for all four prose paths: the narrative, the preset
+insights, the chart caption and the agent. LaTeX maths is not something a sales
+narrative ever needs, so disabling it wholesale closes the failure class instead of
+patching instances --- the same move as constraining the model to single quotes in
+Defect~1. The exported PDF and Word reports unescape on the way out, because
+reportlab has no maths syntax and would print the backslash.
+
 \subsection{Conversational context (B4)}
 
 The last 5 turns are replayed as user/assistant message pairs carrying the question and
@@ -712,6 +849,92 @@ Turn 2 is meaningless without Turn 1. The model resolved it correctly.
 % 7. TASK C
 % =====================================================================
 \section{Task C --- Visualization}
+
+\subsection{Dashboard architecture (C1)}
+\label{sec:tabs}
+
+Five tabs against a required three, over one global filter panel. The panel is the
+architectural point: \textbf{year range, region, category and segment are applied
+once, and every tab reads the same filtered scope.} There is no way for two tabs to
+disagree about what ``the data'' means, and an AI answer can never be computed over a
+different population than the chart beside it.
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}llX@{}}
+\toprule
+\textbf{Tab} & \textbf{Task} & \textbf{What it does, and who decides} \\
+\midrule
+Overview     & A1, A3, B3 & Headline totals, the data-quality card, three preset insights. No model chooses anything: the aggregations are hand-written and the LLM only narrates them \\
+Exploration  & C2         & The eight-chart suite over the filtered scope \\
+AI Assistant & B2--B5     & The model writes pandas, the sandbox runs it, the model narrates the result. Exports live here \\
+Anomalies    & D3         & Isolation Forest ranks the strangest orders; the model explains rows the detector has already flagged \\
+Agent        & D4         & A ReAct loop over six typed tools, one of which leaves the machine. The reasoning chain is on screen \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Figures~\ref{fig:ui-overview}--\ref{fig:ui-agent} show each tab as it actually runs.
+They are captured from the live application by \texttt{scripts/capture\_ui.py},
+which drives a real browser against a real model rather than photographing a
+mock-up: every AI answer in them was generated at capture time.
+
+\begin{figure}[htbp]
+\centering
+\begin{minipage}{0.49\textwidth}
+  \centering\includegraphics[width=\textwidth]{ui_overview.png}
+  \caption{\textbf{Overview.} Totals, the data-quality card (A3) and the preset
+  insights (B3). The sidebar filter panel is applied once and read by every tab.
+  ``Model ready'' is a live health check, not a decoration: when the model is
+  unreachable it turns red and says so.}
+  \label{fig:ui-overview}
+\end{minipage}\hfill
+\begin{minipage}{0.49\textwidth}
+  \centering\includegraphics[width=\textwidth]{ui_exploration.png}
+  \caption{\textbf{Exploration.} The chart suite (C2) over the filtered scope.
+  Colour follows the entity, so changing a filter never repaints the survivors
+  into different hues.}
+  \label{fig:ui-exploration}
+\end{minipage}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\begin{minipage}{0.49\textwidth}
+  \centering\includegraphics[width=\textwidth]{ui_ai_assistant.png}
+  \caption{\textbf{AI Assistant.} A question answered end to end: Gemma wrote the
+  pandas, the sandbox ran it, Gemma narrated the result, and \texttt{autochart}
+  chose the bar chart from the result's shape and captioned it. The diverging
+  scale is doing real work --- the losses are red because the metric is signed.}
+  \label{fig:ui-ai}
+\end{minipage}\hfill
+\begin{minipage}{0.49\textwidth}
+  \centering\includegraphics[width=\textwidth]{ui_ai_trace.png}
+  \caption{\textbf{The same answer, opened up.} Every answer carries its evidence:
+  the generated code and the phase timings. A reader who does not trust the number
+  can read the query that produced it --- the whole argument for generating code
+  rather than having the model recite figures.}
+  \label{fig:ui-trace}
+\end{minipage}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\begin{minipage}{0.49\textwidth}
+  \centering\includegraphics[width=\textwidth]{ui_anomalies.png}
+  \caption{\textbf{Anomalies (D3).} The Isolation Forest's ranked output, worst
+  first, with the LLM explaining rows the detector has already flagged. The model
+  is never asked \emph{what} is anomalous.}
+  \label{fig:ui-anomalies}
+\end{minipage}\hfill
+\begin{minipage}{0.49\textwidth}
+  \centering\includegraphics[width=\textwidth]{ui_agent.png}
+  \caption{\textbf{Agent (D4).} The holiday question answered live: two tool calls
+  in 6.0\,s, one of them to an external API, finding sales 15.9\% per day higher
+  around US public holidays. Task B cannot answer this --- the fact is not in the
+  dataset, and the second call's arguments are the first call's output.}
+  \label{fig:ui-agent}
+\end{minipage}
+\end{figure}
 
 \subsection{Colour system}
 
@@ -773,14 +996,14 @@ Eight chart types against a required six.
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=0.78\textwidth]{trend_light.png}
+\includegraphics[width=0.66\textwidth]{trend_light.png}
 \caption{Revenue and profit trend as small multiples. Shared x-axis, independent
 truthful y-scales --- the honest alternative to a dual axis (\S\ref{sec:dual}).}
 \end{figure}
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=0.72\textwidth]{map_light.png}
+\includegraphics[width=0.60\textwidth]{map_light.png}
 \caption{Sales by state: sequential single-hue blue, because sales is a magnitude
 and more is simply more. Switching the metric to Profit in the app switches the
 scale to diverging blue/red with a neutral grey midpoint, so that a loss-making
@@ -1117,6 +1340,12 @@ rather than hiding it behind a curated demo.
       crash, and the base64 array encoding that broke every question after the first.
       Both were in pure functions, both were trivially testable, and both reached
       production because nothing ran before the push.
+\item \textbf{The renderer mangled every dollar amount for most of the project's
+      life} (\S\ref{sec:math}), and none of our checks could see it: they assert on
+      the text the model returns, and that text was always correct. It took
+      screenshotting the app for this report to notice. \textbf{The lesson is that a
+      check which never looks at the output a human sees cannot find the bugs a human
+      sees} --- and our checks are all of that kind.
 \item \textbf{The agent loops} beyond 2--3 steps. Guarded, not solved.
 \item \textbf{The agent is narrow.} Its typed tools cannot express what
       \texttt{query\_data}'s enums do not contain, so for most questions the Task B
@@ -1241,6 +1470,9 @@ autocomplete would be untrue.
       writing the browserless chart fallback.
 \item Implementing the agent's external holiday tool and its injection guards
       (\S\ref{sec:agent}).
+\item Diagnosing the Markdown/maths rendering defect (\S\ref{sec:math}) and writing
+      the escaping that fixes it, after it was spotted in the screenshots captured
+      for this report.
 \item Drafting this report.
 \end{itemize}
 
