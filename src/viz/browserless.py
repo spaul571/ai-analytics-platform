@@ -22,6 +22,7 @@ module is never reached.
 
 from __future__ import annotations
 
+import base64
 import io
 
 import matplotlib
@@ -43,6 +44,29 @@ _DEFAULT_BLUE = "#2a78d6"
 
 class UnsupportedFigure(RuntimeError):
     """The figure holds a trace this fallback will not redraw."""
+
+
+def _values(value):
+    """Read a trace array, decoding Plotly's base64 typed-array spec if needed.
+
+    plotly 6 stores numpy arrays as {"dtype": "f8", "bdata": "<base64>"} the
+    moment a figure is serialised, and a Figure round-tripped through pickle
+    comes back holding those dicts rather than arrays. `st.cache_data` pickles
+    what it caches, so the figure is live on the turn it is built and encoded on
+    every rerun after - which is why this only ever bit from the second question
+    onwards.
+
+    plotly itself never decodes these in Python: the spec exists for plotly.js,
+    and kaleido hands it straight to the browser. Redrawing here means decoding
+    it ourselves.
+    """
+    if isinstance(value, dict) and "bdata" in value and "dtype" in value:
+        array = np.frombuffer(base64.b64decode(value["bdata"]), dtype=np.dtype(value["dtype"]))
+        shape = value.get("shape")
+        if shape:
+            array = array.reshape([int(dim) for dim in str(shape).split(",")])
+        return array
+    return np.asarray(value)
 
 
 def _to_mpl_color(color) -> str:
@@ -68,7 +92,7 @@ def _marker_colors(trace, count: int):
     if isinstance(color, str):
         return _to_mpl_color(color)
 
-    values = np.asarray(color, dtype=float)
+    values = _values(color).astype(float)
     scale = getattr(marker, "colorscale", None)
     if scale is None:
         return _DEFAULT_BLUE
@@ -97,8 +121,8 @@ def _axis_title(layout_axis) -> str:
 
 
 def _draw_bar(ax, trace) -> None:
-    x = [str(v) for v in trace.x]
-    y = np.asarray(trace.y, dtype=float)
+    x = [str(v) for v in _values(trace.x)]
+    y = _values(trace.y).astype(float)
     ax.bar(x, y, color=_marker_colors(trace, len(y)), edgecolor="white", linewidth=0.8)
     if (y < 0).any():
         ax.axhline(0, color=_MUTED, linewidth=1)
@@ -111,7 +135,7 @@ def _draw_bar(ax, trace) -> None:
 
 
 def _draw_scatter(ax, trace) -> None:
-    x, y = trace.x, trace.y
+    x, y = _values(trace.x), _values(trace.y)
     mode = trace.mode or "markers"
     line_color = _to_mpl_color(getattr(trace.line, "color", None) or _DEFAULT_BLUE)
 
