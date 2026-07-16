@@ -671,15 +671,15 @@ with tab_agent:
     st.subheader("Multi-turn reasoning agent")
     st.caption(
         "A ReAct loop: the model decides whether to query, detect anomalies, "
-        "chart, or answer — then observes the result and decides again. Its tools "
-        "take typed arguments, so unlike the AI Assistant it never writes code "
-        "and needs no sandbox."
+        "look up holidays, compare dates, chart, or answer — then observes the "
+        "result and decides again. Its tools take typed arguments, so unlike the "
+        "AI Assistant it never writes code and needs no sandbox."
     )
 
     agent_examples = [
         "Which region has the highest sales? Chart it.",
         "Find the most unusual orders and tell me what went wrong.",
-        "Compare profit across customer segments, then chart it.",
+        "Do sales rise around US public holidays in 2016?",
     ]
     agent_cols = st.columns(len(agent_examples))
     agent_clicked = None

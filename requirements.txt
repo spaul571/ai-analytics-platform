@@ -42,3 +42,8 @@ reportlab==5.0.0
 
 # --- advanced features (Task D): Isolation Forest for anomaly detection
 scikit-learn==1.8.0
+# The agent's get_holidays tool calls date.nager.at for the public-holiday
+# calendar the dataset does not contain. Streamlit already installs requests, but
+# src/data/external.py imports it directly, so it is pinned here rather than
+# relied on as somebody else's transitive dependency.
+requests==2.34.2

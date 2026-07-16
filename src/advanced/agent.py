@@ -22,6 +22,26 @@ this surface needs no sandbox at all: it is safe by construction rather than by
 containment. That is a real design distinction and the two approaches sit
 side by side in this project on purpose.
 
+THE ONE TOOL THAT LEAVES THE MACHINE
+------------------------------------
+`get_holidays` calls a public API, because the dataset cannot say which of its
+1,237 order days were public holidays and "do sales move around holidays?" is a
+fair question to ask of retail data. Network access is where agents usually
+acquire their worst failure mode - a tool returns attacker-controlled prose, the
+prose enters the context, and the model follows it - so the same principle is
+applied rather than abandoned: the model supplies a year, the executor builds the
+URL from constants, and only an ISO date and a truncated name come back. There is
+no free-text field in the response for anyone to write instructions into. See
+src/data/external.py for the full guard list. A web-search tool would have been
+more impressive and would have handed the model a paragraph of someone else's
+text; that is the trade being refused here.
+
+`compare_dates` is the other half. An external fact is worth nothing until it
+touches the data, so it takes dates from the model and does the join in the
+executor: per-day metric on those dates against every other day. Fetch, then
+analyse, then answer - a genuinely dependent chain the Task B pipeline cannot
+express.
+
 KNOWN LIMITATION (state it in the report)
 -----------------------------------------
 Gemma 4 E4B is a 4B model. It plans two or three steps competently and then
@@ -40,6 +60,7 @@ from typing import Any, Literal
 import pandas as pd
 
 from src.config import LLM
+from src.data.external import MAX_YEAR, MIN_YEAR, ExternalDataError, fetch_holidays
 from src.data.query import Aggregation, Filter, aggregate
 from src.data.schema import DatasetSchema
 from src.llm.client import LLMClient, LLMError
@@ -48,6 +69,12 @@ from src.llm.client import LLMClient, LLMError
 # tool calls plus a final answer covers every question the tools can express;
 # beyond that the model is looping, not thinking.
 MAX_STEPS = 6
+
+# compare_dates takes its dates from the model, so both are capped: a year of
+# holidays is ~16 dates, and a window wide enough to swallow the whole calendar
+# would make the comparison meaningless rather than wrong.
+_MAX_COMPARE_DATES = 40
+_MAX_COMPARE_WINDOW = 14
 
 StepKind = Literal["thought", "action", "observation", "answer", "error"]
 
@@ -155,6 +182,62 @@ TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "get_holidays",
+            "description": (
+                "Look up the US public holidays for one year from an external "
+                "calendar API. The dataset does not know which days were "
+                "holidays. Use this before comparing sales around holidays, then "
+                "pass the dates it returns to compare_dates."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "year": {
+                        "type": "integer",
+                        "description": f"Year between {MIN_YEAR} and {MAX_YEAR}.",
+                    }
+                },
+                "required": ["year"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "compare_dates",
+            "description": (
+                "Compare a metric on specific calendar dates against every other "
+                "day in the data. Use this with the dates returned by "
+                "get_holidays to measure whether those days differ from normal. "
+                "A window widens each date into a range around it."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "dates": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "ISO dates, e.g. ['2016-11-24', '2016-12-25'].",
+                    },
+                    "metric": {
+                        "type": "string",
+                        "enum": ["Sales", "Profit", "Quantity", "Discount"],
+                    },
+                    "window_days": {
+                        "type": "integer",
+                        "description": (
+                            "Days either side of each date to include. 0 is the "
+                            "day itself; 3 covers the surrounding week."
+                        ),
+                    },
+                },
+                "required": ["dates", "metric"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "create_chart",
             "description": (
                 "Draw the result of the previous query_data call as a chart. Call "
@@ -255,6 +338,10 @@ class ToolExecutor:
                 return self._query(arguments)
             if name == "detect_anomalies":
                 return self._anomalies(arguments)
+            if name == "get_holidays":
+                return self._holidays(arguments)
+            if name == "compare_dates":
+                return self._compare_dates(arguments)
             if name == "create_chart":
                 return self._chart(arguments)
             return f"ERROR: unknown tool {name!r}."
@@ -317,6 +404,87 @@ class ToolExecutor:
             f"{len(report.scored):,} order lines "
             f"(total loss on flagged rows: ${report.total_loss:,.0f}).\n"
             f"The {len(worst)} worst:\n{worst.to_string(index=False)}"
+        )
+
+    def _holidays(self, args: dict[str, Any]) -> str:
+        """The one tool that leaves the machine. Failure is an observation, not a crash."""
+        try:
+            holidays = fetch_holidays(int(args.get("year") or 0))
+        except ExternalDataError as exc:
+            # Handed back as an observation so the model can carry on with the
+            # local tools. A dead API must not end the run.
+            return f"ERROR: {exc}"
+
+        listing = "\n".join(f"{h.day.isoformat()}  {h.name}" for h in holidays)
+        return (
+            f"{len(holidays)} US public holidays in {args.get('year')} "
+            f"(from date.nager.at):\n{listing}\n"
+            "Pass these dates to compare_dates to see how sales behaved around them."
+        )
+
+    def _compare_dates(self, args: dict[str, Any]) -> str:
+        """Compare named days against every other day. The model supplies dates only."""
+        metric: str = args.get("metric", "Sales")
+        if metric not in ("Sales", "Profit", "Quantity", "Discount"):
+            return f"ERROR: {metric!r} is not a metric this tool can compare."
+
+        raw_dates = args.get("dates") or []
+        if isinstance(raw_dates, str):  # small models sometimes send one string
+            raw_dates = [raw_dates]
+
+        days: list[pd.Timestamp] = []
+        for value in raw_dates[:_MAX_COMPARE_DATES]:
+            try:
+                days.append(pd.Timestamp(str(value).strip()).normalize())
+            except ValueError:
+                continue  # skip what we cannot parse rather than fail the call
+        if not days:
+            return (
+                "ERROR: no usable dates. Pass ISO dates like ['2016-11-24'], "
+                "for example the ones get_holidays returned."
+            )
+
+        window = max(0, min(int(args.get("window_days") or 0), _MAX_COMPARE_WINDOW))
+        order_days = self.df["Order Date"].dt.normalize()
+
+        selected = pd.Series(False, index=self.df.index)
+        for day in days:
+            span = pd.Timedelta(days=window)
+            selected |= order_days.between(day - span, day + span)
+
+        inside = self.df.loc[selected, metric]
+        outside = self.df.loc[~selected, metric]
+        if inside.empty:
+            return (
+                f"No orders fall on those dates (within {window} days). The dataset runs "
+                "2014-01-03 to 2017-12-30."
+            )
+
+        # Per-day means, not totals: the two groups differ hugely in size, so
+        # totals would only restate that there are more ordinary days than
+        # holidays. The per-day rate is the comparison that carries meaning.
+        inside_days = order_days[selected].nunique()
+        outside_days = order_days[~selected].nunique()
+        inside_rate = inside.sum() / inside_days if inside_days else 0.0
+        outside_rate = outside.sum() / outside_days if outside_days else 0.0
+        delta = ((inside_rate / outside_rate) - 1) * 100 if outside_rate else 0.0
+
+        self.last_result = pd.DataFrame(
+            {
+                "Period": [f"On the {len(days)} dates (within {window}d)", "All other days"],
+                f"{metric} per day": [round(inside_rate, 2), round(outside_rate, 2)],
+                "Days": [inside_days, outside_days],
+                "Orders": [len(inside), len(outside)],
+            }
+        )
+
+        return (
+            f"{metric} on the {len(days)} given dates (within {window} days) vs every other day:\n"
+            f"  those dates : ${inside_rate:,.2f} per day across {inside_days} days "
+            f"({len(inside):,} order lines)\n"
+            f"  other days  : ${outside_rate:,.2f} per day across {outside_days} days "
+            f"({len(outside):,} order lines)\n"
+            f"  difference  : {delta:+.1f}% per day"
         )
 
     def _chart(self, args: dict[str, Any]) -> str:
