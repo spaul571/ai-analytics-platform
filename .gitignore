@@ -6,10 +6,18 @@
 #   DEPLOY.md     the runbook for the above.
 #   PRESENTATION.md  speaker notes.
 #   docs/         working notes.
+#   .devcontainer/ Codespaces boilerplate. It also pinned Python 3.11, which the
+#                 pins in requirements.txt do not work on.
+#   report/REPORT.md  the prose draft REPORT.tex was typeset from. Two copies of
+#                 one document drift - that is how a figure caption came to
+#                 describe a chart the report did not contain - so the .tex is
+#                 the single source and the draft stays local.
 deploy/
 DEPLOY.md
 PRESENTATION.md
 docs/
+.devcontainer/
+report/REPORT.md
 
 # Python
 __pycache__/

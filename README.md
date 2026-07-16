@@ -156,7 +156,6 @@ scripts/
 report/                everything the written report is built from
   REPORT.pdf           the submitted deliverable (M5) - read this one
   REPORT.tex           its source; build with `latexmk -pdf REPORT.tex`
-  REPORT.md            the working draft the LaTeX was typeset from
   figures/             charts (light + dark) and UI screenshots, all regenerated
   benchmark-runs/      the raw benchmark runs the report's tables cite
 ```
