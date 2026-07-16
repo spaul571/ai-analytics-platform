@@ -26,7 +26,14 @@ from src.llm.insights import PRESETS, generate_insight
 from src.llm.memory import ConversationMemory
 from src.llm.pipeline import NLQueryPipeline
 from src.viz import autochart, charts
-from src.viz.export import ReportPayload, figure_to_png, figure_to_svg, to_docx, to_pdf
+from src.viz.export import (
+    ReportPayload,
+    figure_renderable,
+    figure_to_png,
+    figure_to_svg,
+    to_docx,
+    to_pdf,
+)
 from src.viz.theme import Theme
 
 st.set_page_config(
@@ -506,7 +513,10 @@ with tab_ai:
                     width="stretch",
                     key=f"docx_{key}",
                 )
-            if figure is not None:
+            # Without a browser the map cannot be rasterised at all, and
+            # `data=` is evaluated eagerly - so ask first rather than let the
+            # download button take the whole page down on every rerun.
+            if figure_renderable(figure):
                 with e3:
                     st.download_button(
                         "Chart PNG",
@@ -524,6 +534,13 @@ with tab_ai:
                         mime="image/svg+xml",
                         width="stretch",
                         key=f"svg_{key}",
+                    )
+            elif figure is not None:
+                with e3:
+                    st.caption(
+                        "Map images need a browser, which this hosted "
+                        "environment does not have. The PDF and Word reports "
+                        "still download, without the map."
                     )
 
             with st.expander("How this was answered"):

@@ -63,7 +63,7 @@ Keep it. It goes in two places: `PROXY_TOKEN` on your machine, and
 
 ### 3. Deploy the frontend
 
-1. Go to <https://share.streamlit.io> and sign in with GitHub.
+1. Go to [https://share.streamlit.io](https://share.streamlit.io) and sign in with GitHub.
 2. **New app** → repo `spaul571/ai-analytics-platform`, branch `main`, main file
    `app.py`.
 3. **Advanced settings → Python version: 3.13.** The dependency pins in
@@ -71,10 +71,14 @@ Keep it. It goes in two places: `PROXY_TOKEN` on your machine, and
 4. Deploy. It will build and then fail to answer questions — expected, there is
    no LLM behind it yet. Step 4 fixes that.
 
-`packages.txt` installs Chromium into the container. Kaleido 1.x drives a real
-browser to rasterise Plotly figures, and Cloud's image has none; without it the
-PDF/PNG/SVG exports in Task C4 throw at runtime while the rest of the app looks
-fine.
+There is deliberately no `packages.txt`. Kaleido 1.x rasterises Plotly figures
+by driving a real browser and Cloud's image has none, but asking apt for
+`chromium` pulls Debian's own libpython into the container and the interpreter
+segfaults on boot — the whole app, to serve four download buttons. Instead
+`src/viz/browserless.py` redraws bar/line/scatter figures with matplotlib, so
+the Task C4 exports keep their chart. Only the choropleth cannot be redrawn:
+on Cloud its image buttons are hidden and its report prints without the map.
+Locally, where Chrome exists, kaleido does the work and the fallback never runs.
 
 ### 4. Point the app at your machine
 
@@ -152,13 +156,13 @@ the Cloud dashboard between demos.
 
 ## Failure modes, and what they look like
 
-| Symptom in the deployed app | Cause | Fix |
-|---|---|---|
-| Every question fails with a connection error | Tunnel restarted, hostname changed | Update `LLM_BASE_URL` in Cloud secrets |
-| Every question fails with a 401 | `LLM_API_KEY` ≠ `PROXY_TOKEN` | Make them equal; restart proxy after changing `PROXY_TOKEN` |
-| App loads, charts work, questions time out | LM Studio not running or no model loaded | Load the model, restart the server |
-| Charts render, exports throw | Chromium missing in the container | `packages.txt` is committed; check it deployed |
-| App boots but no data | `data/superstore.csv` not committed | It is committed on purpose — see `.gitignore` |
+| Symptom in the deployed app                  | Cause                                    | Fix                                                          |
+| -------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------ |
+| Every question fails with a connection error | Tunnel restarted, hostname changed       | Update`LLM_BASE_URL` in Cloud secrets                      |
+| Every question fails with a 401              | `LLM_API_KEY` ≠ `PROXY_TOKEN`       | Make them equal; restart proxy after changing`PROXY_TOKEN` |
+| App loads, charts work, questions time out   | LM Studio not running or no model loaded | Load the model, restart the server                           |
+| Reports download without their chart          | No browser in the container, and the figure is a map | Expected on Cloud. Bar/line/scatter fall back to matplotlib; the choropleth cannot |
+| App boots but no data                        | `data/superstore.csv` not committed    | It is committed on purpose — see`.gitignore`              |
 
 ## Contingency
 

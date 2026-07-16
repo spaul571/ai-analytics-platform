@@ -15,9 +15,11 @@ year - so the applied filters are printed even when none are set ("None").
 from __future__ import annotations
 
 import io
+import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
+from functools import lru_cache
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -38,6 +40,13 @@ from reportlab.platypus import (
     Table,
     TableStyle,
 )
+
+from src.viz.browserless import (
+    UnsupportedFigure,
+    figure_to_png_fallback,
+    figure_to_svg_fallback,
+)
+from src.viz.browserless import supports as _fallback_supports
 
 BRAND = colors.HexColor("#2a78d6")
 INK = colors.HexColor("#0b0b0b")
@@ -75,28 +84,87 @@ class ReportPayload:
 
 
 # --------------------------------------------------------------------- charts
+class ImageExportUnavailable(RuntimeError):
+    """Raised when no browser is present to rasterise a figure.
+
+    Distinct from a genuine render failure so callers can hide the image export
+    controls instead of showing an error the user cannot act on.
+    """
+
+
+@lru_cache(maxsize=1)
+def image_export_available() -> bool:
+    """Whether figures can be rasterised here.
+
+    kaleido 1.x drives a headless Chrome. Streamlit Community Cloud has no
+    browser and cannot get one - apt's `chromium` drags in Debian's own
+    libpython and segfaults the container - so the deployed app runs without
+    this and the export path degrades instead of raising.
+
+    The lookup goes through choreographer, which is what kaleido itself uses,
+    so this answers the same question kaleido will ask at render time. A plain
+    `shutil.which("chrome")` would report False on Windows, where Chrome is on
+    no PATH and is found through the registry.
+    """
+    if os.environ.get("BROWSER_PATH"):
+        return True
+    try:
+        from choreographer.browsers.chromium import Chromium  # noqa: PLC0415
+
+        return bool(Chromium.find_browser(skip_local=False))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def figure_renderable(figure: go.Figure | None) -> bool:
+    """Whether this figure can be turned into an image at all, here.
+
+    True where a browser exists (kaleido draws anything) and, where none does,
+    for the traces the matplotlib fallback covers. The UI asks this before
+    offering the image downloads - `st.download_button` evaluates its `data`
+    eagerly, so an unrenderable figure would take the page down on every rerun
+    rather than when the button is clicked.
+    """
+    if figure is None:
+        return False
+    return image_export_available() or _fallback_supports(figure)
+
+
 def figure_to_png(figure: go.Figure, width: int = 1000, height: int = 560, scale: int = 2) -> bytes:
     """Render a Plotly figure to PNG bytes.
 
-    Requires kaleido. If it is missing the caller gets a clear error rather than
-    a corrupt file, because a silently chart-less report is worse than a failed
-    export.
+    Uses kaleido where a browser exists, which is every local run and is what
+    the exported assets in the report were made with. Where none exists the
+    figure is redrawn with matplotlib (see `browserless`) so the deployed
+    reports still carry a chart. Only if that too refuses - a choropleth, which
+    cannot be redrawn - does the caller get an error, because a silently
+    chart-less report is worse than a failed export.
     """
+    if image_export_available():
+        try:
+            return figure.to_image(format="png", width=width, height=height, scale=scale)
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(
+                "Could not render the chart to PNG. Is `kaleido` installed? "
+                f"(pip install kaleido). Underlying error: {exc}"
+            ) from exc
     try:
-        return figure.to_image(format="png", width=width, height=height, scale=scale)
-    except Exception as exc:  # noqa: BLE001
-        raise RuntimeError(
-            "Could not render the chart to PNG. Is `kaleido` installed? "
-            f"(pip install kaleido). Underlying error: {exc}"
-        ) from exc
+        return figure_to_png_fallback(figure, width=width, height=height, scale=scale)
+    except UnsupportedFigure as exc:
+        raise ImageExportUnavailable(str(exc)) from exc
 
 
 def figure_to_svg(figure: go.Figure, width: int = 1000, height: int = 560) -> bytes:
-    """Render a Plotly figure to SVG bytes."""
+    """Render a Plotly figure to SVG bytes. Falls back as `figure_to_png` does."""
+    if image_export_available():
+        try:
+            return figure.to_image(format="svg", width=width, height=height)
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(f"Could not render the chart to SVG: {exc}") from exc
     try:
-        return figure.to_image(format="svg", width=width, height=height)
-    except Exception as exc:  # noqa: BLE001
-        raise RuntimeError(f"Could not render the chart to SVG: {exc}") from exc
+        return figure_to_svg_fallback(figure, width=width, height=height)
+    except UnsupportedFigure as exc:
+        raise ImageExportUnavailable(str(exc)) from exc
 
 
 # ----------------------------------------------------------------- markdown
