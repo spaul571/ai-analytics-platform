@@ -17,6 +17,17 @@ env/
 #   python -m scripts.export_report_assets
 exports/
 
+# LaTeX build intermediates. REPORT.tex and the built REPORT.pdf ARE committed -
+# the PDF is the submitted deliverable (M5) and a marker should not need a TeX
+# installation to read it. Everything latexmk regenerates is not.
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+
 # The dataset (2.2 MB, public sample data) IS committed. A deployed instance has
 # no local filesystem to fetch it into, so the app cannot start without it.
 # Any other CSV dropped into data/ stays local.
